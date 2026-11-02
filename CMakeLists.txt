@@ -74,7 +74,17 @@ if(LDH_BUILD_LEVI_MOD)
     -fvisibility-inlines-hidden
   )
   target_link_options(levi_distant_horizon PRIVATE "-Wl,-z,max-page-size=16384")
-  target_link_libraries(levi_distant_horizon PRIVATE ldh_core preloader)
+
+  # Config.hpp is a public Preloader header but includes these dependencies
+  # directly. Preloader 0.2.2 links them privately, so consumers must expose
+  # the same header-only targets when using ConfigFile<T>.
+  target_link_libraries(levi_distant_horizon PRIVATE
+    ldh_core
+    preloader
+    Boost::pfr
+    magic_enum::magic_enum
+    nlohmann_json::nlohmann_json
+  )
 
   set(LEVI_MOD_ID "levi_distant_horizon")
   set(LEVI_MOD_NAME "Levi Distant Horizon")
