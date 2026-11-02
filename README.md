@@ -1,35 +1,33 @@
 # Levi Distant Horizon
 
-A native Level-of-Detail (LOD) terrain project for LeviLauncher and Minecraft Bedrock 26.60+ on Android.
+A native LeviLauncher mod project for Minecraft Bedrock on Android, targeting the 26.60+ development line.
 
-## Current status
+## LeviLauncher package
 
-**Milestone 6: bounded in-memory chunk retention.** The C++20 core includes heightfield mesh generation, a bounded priority worker pool, cooperative cancellation, a persistent per-world tile mesh cache, a bounded resident-tile streamer, explicit cache restore/persist operations, a frame-time quality controller, optional downward boundary skirts, and a separate RAM-only chunk snapshot cache.
+The repository builds a real Android native mod package using the public Preloader Android SDK (0.2.2).
 
-The Bobby-inspired retention layer keeps terrain heightfield snapshots that the player has already visited in a bounded least-recently-used (LRU) memory cache. It does not write those snapshots to disk. When its RAM budget is reached, older snapshots are evicted. The cache is session-only and is cleared when the process exits. It cannot display chunks that the game has never loaded or that the adapter has not captured.
+- Package format: `.levipack`
+- Runtime mod ID: `levi_distant_horizon`
+- Display name: Levi Distant Horizon
+- ABI: `arm64-v8a`
+- Native entry: `liblevi_distant_horizon.so`
+- Loader manifest type: `preload-native`
 
-The streamer accepts terrain snapshots supplied by a future game/launcher adapter, builds LOD meshes away from the caller thread, drops work outside the current focus region, and keeps a bounded resident set. Skirts provide a geometry primitive for hiding small gaps between adjacent LOD tiles. The project still does not read Minecraft chunks or draw GPU geometry.
+GitHub Actions builds and validates the package on pushes to `main`, pull requests, and manual dispatches. Download the `Levi-Distant-Horizon-levipack-arm64` artifact from the workflow run, then import the `.levipack` into LeviLauncher.
 
-## Target game versions
+## Current implementation status
 
-- **Target:** Minecraft Bedrock **26.60 and newer (26.60+)**.
-- Earlier releases such as 26.2 are not the target for this project.
-- Compatibility with each 26.60+ release must be verified against the matching LeviLauncher/Preloader build and game interfaces before claiming support. The current native core is version-independent and is not yet connected to live Minecraft terrain or world rendering.
+This is a genuine Preloader-native module, not an APK or a resource/behavior pack. Its lifecycle loads the C++20 LOD core and creates the bounded 16 MiB RAM-only chunk snapshot cache. The cache is cleared when the mod is disabled or unloaded.
 
-## Goals
+**Important:** this is the first loadable integration milestone, not a finished Distant Horizons renderer. The public Preloader SDK lifecycle does not itself provide a supported API for reading live Bedrock chunk heightfields or submitting arbitrary terrain meshes to the game's world renderer. This mod therefore does not claim to display distant terrain yet. It logs this limitation rather than guessing private game offsets or installing unsafe hooks.
 
-- Render simplified terrain beyond the normal view distance.
-- Retain previously visited terrain in memory without growing on-device storage.
-- Support configurable LOD coverage, with a long-term target of 1,024 LOD chunks.
-- Keep terrain generation off the render thread.
-- Keep both RAM and optional disk caches strictly bounded.
-- Adapt detail to measured frame time.
+The Bobby-inspired cache only retains snapshots supplied to it by a future verified game adapter. It does not discover terrain that Minecraft has never loaded, and it writes no snapshots to disk.
 
-A sustained 90 FPS is a performance target, not a universal guarantee. Device GPU, world complexity, thermal throttling, Minecraft version, and renderer integration all affect frame rate.
+## Native core
 
-## Build and test
+The renderer-independent C++20 core currently provides heightfield-to-LOD mesh generation, bounded priority scheduling and cooperative cancellation, a persistent per-world terrain mesh cache, bounded LOD tile streaming, adaptive quality control, optional boundary skirts, and a bounded RAM-only LRU terrain snapshot cache.
 
-Requires CMake 3.20+ and a C++20 compiler.
+## Build and test the core on Linux
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
@@ -37,49 +35,31 @@ cmake --build build --parallel 2
 ctest --test-dir build --output-on-failure
 ```
 
-## Android build
+## Build the Android LeviPack locally
 
-The platform-independent core is position-independent and can be cross-compiled with the Android NDK CMake toolchain. The official [Preloader Android SDK](https://github.com/LiteLDev/preloader-android) provides native mod lifecycle and mod-menu APIs. The sample verified during this milestone uses SDK tag 0.2.2.
+Requirements: Android NDK 28.2.13676358, CMake 3.22+, and Ninja.
 
-The inspected public Preloader interfaces establish native mod lifecycle and menu/overlay functionality. They do not establish a supported API for acquiring live chunk heightfields or submitting arbitrary 3D terrain meshes to Minecraft's world renderer. Those integrations must target a verified game/renderer interface, not guessed offsets.
+```sh
+cmake -S . -B build-android -G Ninja \
+  -DCMAKE_BUILD_TYPE=Release \
+  -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" \
+  -DANDROID_ABI=arm64-v8a \
+  -DANDROID_PLATFORM=android-28 \
+  -DLDH_BUILD_TESTS=OFF \
+  -DLDH_BUILD_LEVI_MOD=ON
+cmake --build build-android --target levi_package --parallel 2
+```
 
-## Architecture roadmap
+The package is written to `build-android/Levi-Distant-Horizon-0.7.0-arm64-v8a.levipack`.
 
-1. **LOD core:** heightfield sampling, simplified mesh generation, validation, and tests.
-2. **Streaming:** bounded worker pool, prioritized jobs, cancellation, focus-region eviction, and resident tile limits.
-3. **Persistent cache:** optional versioned per-world LOD meshes with size limits, integrity checks, and explicit background I/O.
-4. **Quality control:** frame-time EMA, hysteretic detail reduction/recovery, distance-based sample steps, and work-budget recommendations.
-5. **Seams:** optional downward boundary skirts for each edge of a regular heightfield mesh.
-6. **RAM-only chunk retention:** bounded LRU snapshots, session-only lifetime, no disk writes.
-7. **Bedrock bridge:** acquire terrain data through a verified launcher/game interface.
-8. **Renderer:** upload and draw LOD meshes with correct GPU resource ownership.
-9. **Transitions and scale tests:** neighbor-aware LOD changes and progressive testing at 64, 128, 256, 512, and 1,024 tiles.
+## Minecraft compatibility
 
-## Streaming API notes
+The native module currently declares an empty `minecraft_versions` allowlist, which the Preloader manifest defines as all versions. That is not a claim that every game build is compatible. Runtime compatibility must be verified against the matching LeviLauncher/Preloader and Minecraft build. The project target remains Bedrock 26.60+.
 
-- Feed captured tile snapshots to `LodStreamer::submit` with a world ID, tile coordinates, LOD level, sample step, priority, and caller-maintained revision.
-- Call `set_focus` as the player moves. Work and resident tiles outside the square focus radius are cancelled or evicted.
-- Call `poll` from the update loop. It only consumes completed futures and never waits for worker completion.
-- `restore_cached` and `persist` perform disk I/O. Run them on a background thread, not the render thread.
-- Cache restore is explicit because the cache cannot know whether a saved world tile has changed. The game adapter must validate world identity/revision before restoring.
-- `MemoryChunkCache::put` stores a captured heightfield snapshot in RAM only; `get` refreshes its LRU position. Its byte and entry budgets are enforced independently of the persistent mesh cache.
-- Call `MemoryChunkCache::clear` when leaving a world if snapshots must not cross world sessions.
-- `QualityController::observe_frame` should receive one frame-time sample per frame. Pass its recommended sample step into `LodStreamer::submit`.
-- `append_edge_skirts` appends duplicate lowered edge vertices and side triangles to a regular row-major tile mesh. The renderer should enable a consistent winding/culling policy.
+## Roadmap
 
-## Resource-safety notes
-
-- Defaults to two workers and eight queued jobs, with a hard cap of eight workers.
-- Each job has a configurable height-sample budget.
-- Queued and running jobs can be cancelled between mesh rows.
-- Persistent cache files use a versioned binary format and CRC32 integrity checks; disk cache size and per-entry size are bounded.
-- Resident meshes, pending tile jobs, and RAM-only snapshots have independent hard limits.
-- The RAM-only chunk cache defaults to 16 MiB, at most 2 MiB per snapshot, and 256 entries. These are configurable; no snapshot is written to storage.
-
-## Compatibility and scope
-
-The core contains no Minecraft code, game assets, or proprietary renderer hooks. Bedrock integration must target documented and verified interfaces. Existing community mods demonstrate version-specific signature/offset techniques, but those are not treated as a stable public renderer contract by this project.
-
-## License
-
-License and distribution terms will be selected before publishing binary releases.
+1. Verify the native package loads in LeviLauncher.
+2. Identify a supported, version-verified way to capture loaded terrain.
+3. Feed captured heightfields into the RAM cache and LOD streamer.
+4. Integrate mesh upload and rendering through a verified game-renderer interface.
+5. Test transitions, memory limits, and frame-time behavior on low-end Android devices.

@@ -1,0 +1,8 @@
+{
+  "type": "preload-native",
+  "name": "@LEVI_MOD_NAME@",
+  "author": "@LEVI_MOD_AUTHOR@",
+  "version": "@LEVI_MOD_VERSION@",
+  "entry": "liblevi_distant_horizon.so",
+  "minecraft_versions": []
+}

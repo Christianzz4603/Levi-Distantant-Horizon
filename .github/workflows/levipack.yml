@@ -1,0 +1,67 @@
+name: LeviPack Build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "CMakeLists.txt"
+      - "manifest.json.in"
+      - "include/**"
+      - "src/**"
+      - ".github/workflows/levipack.yml"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  android-arm64:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+      - name: Install NDK and Ninja
+        run: |
+          sdkmanager "platforms;android-28" "ndk;28.2.13676358"
+          sudo apt-get update
+          sudo apt-get install -y ninja-build
+      - name: Configure native mod
+        run: |
+          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/28.2.13676358"
+          cmake -S . -B build-android -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a \
+            -DANDROID_PLATFORM=android-28 \
+            -DLDH_BUILD_TESTS=OFF \
+            -DLDH_BUILD_LEVI_MOD=ON
+      - name: Build .levipack
+        run: cmake --build build-android --target levi_package --parallel 2
+      - name: Validate package
+        run: |
+          python3 - <<'PY'
+          import json
+          import zipfile
+          from pathlib import Path
+          packs = list(Path("build-android").glob("*.levipack"))
+          assert len(packs) == 1, f"Expected one .levipack, found {len(packs)}"
+          with zipfile.ZipFile(packs[0]) as pack:
+              names = set(pack.namelist())
+              root = "levi_distant_horizon/"
+              assert root + "manifest.json" in names, names
+              assert root + "liblevi_distant_horizon.so" in names, names
+              manifest = json.loads(pack.read(root + "manifest.json"))
+              assert manifest["type"] == "preload-native"
+              assert manifest["entry"] == "liblevi_distant_horizon.so"
+          print(f"Validated {packs[0]} ({packs[0].stat().st_size} bytes)")
+          PY
+      - name: Upload LeviPack
+        uses: actions/upload-artifact@v4
+        with:
+          name: Levi-Distant-Horizon-levipack-arm64
+          path: build-android/*.levipack
+          if-no-files-found: error
+          retention-days: 14

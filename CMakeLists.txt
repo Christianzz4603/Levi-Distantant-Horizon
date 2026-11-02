@@ -1,6 +1,9 @@
-cmake_minimum_required(VERSION 3.20)
-project(LeviDistantHorizon VERSION 0.6.0 LANGUAGES CXX)
+cmake_minimum_required(VERSION 3.22)
+project(LeviDistantHorizon VERSION 0.7.0 LANGUAGES CXX)
+
 option(LDH_BUILD_TESTS "Build core tests" ON)
+option(LDH_BUILD_LEVI_MOD "Build the Android LeviLauncher native mod and .levipack" OFF)
+
 add_library(ldh_core
   src/lod_mesh.cpp
   src/lod_scheduler.cpp
@@ -20,7 +23,8 @@ else()
 endif()
 find_package(Threads REQUIRED)
 target_link_libraries(ldh_core PUBLIC Threads::Threads)
-if(LDH_BUILD_TESTS)
+
+if(LDH_BUILD_TESTS AND NOT ANDROID)
   enable_testing()
   add_executable(ldh_core_tests tests/lod_mesh_tests.cpp)
   target_link_libraries(ldh_core_tests PRIVATE ldh_core)
@@ -43,4 +47,53 @@ if(LDH_BUILD_TESTS)
   add_executable(ldh_memory_chunk_cache_tests tests/memory_chunk_cache_tests.cpp)
   target_link_libraries(ldh_memory_chunk_cache_tests PRIVATE ldh_core)
   add_test(NAME ldh_memory_chunk_cache_tests COMMAND ldh_memory_chunk_cache_tests)
+endif()
+
+if(LDH_BUILD_LEVI_MOD)
+  if(NOT ANDROID)
+    message(FATAL_ERROR "LDH_BUILD_LEVI_MOD requires the Android NDK toolchain.")
+  endif()
+  if(NOT CMAKE_ANDROID_ARCH_ABI STREQUAL "arm64-v8a")
+    message(FATAL_ERROR "Levi Distant Horizon currently packages arm64-v8a only.")
+  endif()
+
+  include(FetchContent)
+  FetchContent_Declare(
+    preloader_android
+    GIT_REPOSITORY https://github.com/LiteLDev/preloader-android.git
+    GIT_TAG 0.2.2
+  )
+  FetchContent_MakeAvailable(preloader_android)
+
+  add_library(levi_distant_horizon SHARED src/levi_mod.cpp)
+  target_include_directories(levi_distant_horizon PRIVATE include)
+  target_compile_features(levi_distant_horizon PRIVATE cxx_std_20)
+  target_compile_options(levi_distant_horizon PRIVATE
+    -Wall -Wextra -Wpedantic
+    -fvisibility=hidden
+    -fvisibility-inlines-hidden
+  )
+  target_link_options(levi_distant_horizon PRIVATE "-Wl,-z,max-page-size=16384")
+  target_link_libraries(levi_distant_horizon PRIVATE ldh_core preloader)
+
+  set(LEVI_MOD_ID "levi_distant_horizon")
+  set(LEVI_MOD_NAME "Levi Distant Horizon")
+  set(LEVI_MOD_AUTHOR "Christianzz4603")
+  set(LEVI_MOD_VERSION "${PROJECT_VERSION}")
+  set(LEVI_PACKAGE_DIR "${CMAKE_CURRENT_BINARY_DIR}/package")
+  set(LEVI_MOD_DIR "${LEVI_PACKAGE_DIR}/${LEVI_MOD_ID}")
+  set(LEVI_PACK_FILE "${CMAKE_CURRENT_BINARY_DIR}/Levi-Distant-Horizon-${LEVI_MOD_VERSION}-arm64-v8a.levipack")
+
+  configure_file(manifest.json.in "${CMAKE_CURRENT_BINARY_DIR}/manifest.json" @ONLY)
+
+  add_custom_target(levi_package
+    COMMAND "${CMAKE_COMMAND}" -E rm -rf "${LEVI_PACKAGE_DIR}"
+    COMMAND "${CMAKE_COMMAND}" -E make_directory "${LEVI_MOD_DIR}"
+    COMMAND "${CMAKE_COMMAND}" -E copy "$<TARGET_FILE:levi_distant_horizon>" "${LEVI_MOD_DIR}/liblevi_distant_horizon.so"
+    COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_CURRENT_BINARY_DIR}/manifest.json" "${LEVI_MOD_DIR}/manifest.json"
+    COMMAND "${CMAKE_COMMAND}" -E chdir "${LEVI_PACKAGE_DIR}" "${CMAKE_COMMAND}" -E tar cf "${LEVI_PACK_FILE}" --format=zip "${LEVI_MOD_ID}"
+    DEPENDS levi_distant_horizon
+    COMMENT "Creating LeviLauncher .levipack"
+    VERBATIM
+  )
 endif()
