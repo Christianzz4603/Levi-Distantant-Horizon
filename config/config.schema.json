@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Levi Distant Horizon Settings",
+  "description": "LOD distance, fake distant chunk, adaptive quality, and Bobby-inspired cache preferences.",
+  "type": "object",
+  "properties": {
+    "version": {"type": "integer", "default": 1, "readOnly": true, "title": "Config Version"},
+    "lodEnabled": {"type": "boolean", "default": true, "title": "LOD Chunks Enabled"},
+    "lodChunkRadius": {"type": "integer", "minimum": 8, "maximum": 256, "default": 48, "title": "LOD Radius (chunks)"},
+    "lodDetailStep": {"type": "integer", "minimum": 1, "maximum": 16, "default": 2, "title": "LOD Detail Step"},
+    "adaptiveQuality": {"type": "boolean", "default": true, "title": "Adaptive Quality"},
+    "fakeChunksEnabled": {"type": "boolean", "default": true, "title": "Fake Distant Chunks Enabled"},
+    "fakeChunkDistance": {"type": "integer", "minimum": 16, "maximum": 512, "default": 96, "title": "Fake Chunk Distance (chunks)"},
+    "fakeChunkDetail": {"type": "integer", "minimum": 1, "maximum": 16, "default": 4, "title": "Fake Chunk Detail Step"},
+    "bobbyCacheEnabled": {"type": "boolean", "default": true, "title": "Bobby Cache Enabled"},
+    "bobbyCacheMemoryMb": {"type": "integer", "minimum": 4, "maximum": 256, "default": 16, "title": "Bobby RAM Cache Budget (MiB)"},
+    "bobbyCacheMaxEntries": {"type": "integer", "minimum": 32, "maximum": 4096, "default": 256, "title": "Bobby Maximum Cached Chunks"}
+  },
+  "required": ["version", "lodEnabled", "lodChunkRadius", "lodDetailStep", "adaptiveQuality", "fakeChunksEnabled", "fakeChunkDistance", "fakeChunkDetail", "bobbyCacheEnabled", "bobbyCacheMemoryMb", "bobbyCacheMaxEntries"],
+  "additionalProperties": false
+}

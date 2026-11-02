@@ -1,27 +1,50 @@
 # Levi Distant Horizon
 
-A native LeviLauncher mod project for Minecraft Bedrock on Android, targeting the 26.60+ development line.
+A native LeviLauncher mod project for Minecraft Bedrock on Android, targeting the **26.60+** development line.
 
 ## LeviLauncher package
 
-The repository builds a real Android native mod package using the public Preloader Android SDK (0.2.2).
+The repository builds a native mod package using the public Preloader Android SDK (0.2.2).
 
 - Package format: `.levipack`
 - Runtime mod ID: `levi_distant_horizon`
-- Display name: Levi Distant Horizon
 - ABI: `arm64-v8a`
 - Native entry: `liblevi_distant_horizon.so`
 - Loader manifest type: `preload-native`
 
-GitHub Actions builds and validates the package on pushes to `main`, pull requests, and manual dispatches. Download the `Levi-Distant-Horizon-levipack-arm64` artifact from the workflow run, then import the `.levipack` into LeviLauncher.
+GitHub Actions builds and validates the package. Import the generated `.levipack` into LeviLauncher.
 
-## Current implementation status
+## New settings
 
-This is a genuine Preloader-native module, not an APK or a resource/behavior pack. Its lifecycle loads the C++20 LOD core and creates the bounded 16 MiB RAM-only chunk snapshot cache. The cache is cleared when the mod is disabled or unloaded.
+The mod now registers three editable Mod Menu modules and persists their values in `config/config.json`:
 
-**Important:** this is the first loadable integration milestone, not a finished Distant Horizons renderer. The public Preloader SDK lifecycle does not itself provide a supported API for reading live Bedrock chunk heightfields or submitting arbitrary terrain meshes to the game's world renderer. This mod therefore does not claim to display distant terrain yet. It logs this limitation rather than guessing private game offsets or installing unsafe hooks.
+### LOD Chunks
+- Enable/disable the LOD module.
+- Set LOD radius from 8 to 256 chunks.
+- Adjust mesh detail step from 1 to 16.
+- Toggle adaptive quality.
 
-The Bobby-inspired cache only retains snapshots supplied to it by a future verified game adapter. It does not discover terrain that Minecraft has never loaded, and it writes no snapshots to disk.
+### Fake Distant Chunks
+- Enable/disable the distant fake-chunk profile.
+- Set the configured distance from 16 to 512 chunks.
+- Adjust fake-chunk detail step from 1 to 16.
+
+### Bobby Chunk Cache
+- Enable/disable the Bobby-inspired RAM snapshot cache.
+- Set its memory budget from 4 to 256 MiB.
+- Set its maximum entry count from 32 to 4096.
+
+Settings are available in LeviLauncher’s native Mod Menu and are saved automatically. The Bobby RAM cache is the only one of these settings currently connected to a live core component: changing its budget or entry limit rebuilds the bounded in-memory LRU cache.
+
+## Important implementation status
+
+This is a loadable Preloader-native module with a renderer-independent C++20 LOD core. **It is not yet a functioning Distant Horizons renderer.** The public lifecycle and Mod Menu APIs provide native mod loading and configuration, but the project still needs a verified Minecraft adapter to capture loaded Bedrock chunks and submit generated meshes to the world renderer.
+
+Consequently:
+- LOD radius, LOD detail, adaptive quality, and fake-chunk distance/detail are persisted settings for the future terrain adapter. They do not currently change what appears in the world.
+- The Bobby-inspired RAM cache is configurable and initialized, but it receives no terrain snapshots until a verified chunk-capture adapter exists.
+- No private game offsets or unverified hooks are installed.
+- An empty `minecraft_versions` manifest allowlist is not a claim of compatibility with every game build. Runtime compatibility must be verified against the matching LeviLauncher/Preloader and Minecraft build.
 
 ## Native core
 
@@ -50,11 +73,7 @@ cmake -S . -B build-android -G Ninja \
 cmake --build build-android --target levi_package --parallel 2
 ```
 
-The package is written to `build-android/Levi-Distant-Horizon-0.7.0-arm64-v8a.levipack`.
-
-## Minecraft compatibility
-
-The native module currently declares an empty `minecraft_versions` allowlist, which the Preloader manifest defines as all versions. That is not a claim that every game build is compatible. Runtime compatibility must be verified against the matching LeviLauncher/Preloader and Minecraft build. The project target remains Bedrock 26.60+.
+The package is written to `build-android/Levi-Distant-Horizon-0.8.0-arm64-v8a.levipack`.
 
 ## Roadmap
 

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.22)
-project(LeviDistantHorizon VERSION 0.7.0 LANGUAGES CXX)
+project(LeviDistantHorizon VERSION 0.8.0 LANGUAGES CXX)
 
 option(LDH_BUILD_TESTS "Build core tests" ON)
 option(LDH_BUILD_LEVI_MOD "Build the Android LeviLauncher native mod and .levipack" OFF)
@@ -91,6 +91,7 @@ if(LDH_BUILD_LEVI_MOD)
     COMMAND "${CMAKE_COMMAND}" -E make_directory "${LEVI_MOD_DIR}"
     COMMAND "${CMAKE_COMMAND}" -E copy "$<TARGET_FILE:levi_distant_horizon>" "${LEVI_MOD_DIR}/liblevi_distant_horizon.so"
     COMMAND "${CMAKE_COMMAND}" -E copy "${CMAKE_CURRENT_BINARY_DIR}/manifest.json" "${LEVI_MOD_DIR}/manifest.json"
+    COMMAND "${CMAKE_COMMAND}" -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/config" "${LEVI_MOD_DIR}/config"
     COMMAND "${CMAKE_COMMAND}" -E chdir "${LEVI_PACKAGE_DIR}" "${CMAKE_COMMAND}" -E tar cf "${LEVI_PACK_FILE}" --format=zip "${LEVI_MOD_ID}"
     DEPENDS levi_distant_horizon
     COMMENT "Creating LeviLauncher .levipack"

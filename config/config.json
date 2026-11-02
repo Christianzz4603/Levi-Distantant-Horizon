@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "lodEnabled": true,
+  "lodChunkRadius": 48,
+  "lodDetailStep": 2,
+  "adaptiveQuality": true,
+  "fakeChunksEnabled": true,
+  "fakeChunkDistance": 96,
+  "fakeChunkDetail": 4,
+  "bobbyCacheEnabled": true,
+  "bobbyCacheMemoryMb": 16,
+  "bobbyCacheMaxEntries": 256
+}
