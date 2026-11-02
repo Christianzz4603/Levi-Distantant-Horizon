@@ -4,16 +4,16 @@ A native Level-of-Detail (LOD) terrain project for LeviLauncher and Minecraft Be
 
 ## Current status
 
-**Milestone 4: asynchronous tile streaming and adaptive quality core.** The C++20 core includes heightfield mesh generation, a bounded priority worker pool, cooperative cancellation, a persistent per-world tile mesh cache, a bounded resident-tile streamer, explicit cache restore/persist operations, and a frame-time quality controller.
+**Milestone 5: bounded streaming, adaptive quality, and terrain seam geometry.** The C++20 core includes heightfield mesh generation, a bounded priority worker pool, cooperative cancellation, a persistent per-world tile mesh cache, a bounded resident-tile streamer, explicit cache restore/persist operations, a frame-time quality controller, and optional downward boundary skirts for LOD meshes.
 
-The streamer accepts terrain snapshots supplied by a future game/launcher adapter, builds LOD meshes away from the caller thread, drops work outside the current focus region, and keeps a bounded resident set. It does not itself read Minecraft chunks or draw GPU geometry.
+The streamer accepts terrain snapshots supplied by a future game/launcher adapter, builds LOD meshes away from the caller thread, drops work outside the current focus region, and keeps a bounded resident set. Skirts provide a geometry primitive for hiding small gaps between adjacent LOD tiles. The project still does not read Minecraft chunks or draw GPU geometry.
 
 ## Goals
 
 - Render simplified terrain beyond the normal view distance.
 - Support configurable LOD coverage, with a long-term target of 1,024 LOD chunks.
 - Keep terrain generation off the render thread.
-- Cache generated terrain per world.
+- Cache terrain per world.
 - Bound memory, queued work, and disk use for Android devices.
 - Adapt detail to measured frame time.
 
@@ -41,10 +41,10 @@ The inspected public Preloader interfaces establish native mod lifecycle and men
 2. **Streaming:** bounded worker pool, prioritized jobs, cancellation, focus-region eviction, and resident tile limits.
 3. **Cache:** versioned per-world LOD meshes with size limits, integrity checks, and explicit background I/O.
 4. **Quality control:** frame-time EMA, hysteretic detail reduction/recovery, distance-based sample steps, and work-budget recommendations.
-5. **Bedrock bridge:** acquire terrain data through a verified launcher/game interface.
-6. **Renderer:** upload and draw LOD meshes with correct GPU resource ownership.
-7. **Seams and transitions:** skirts or neighbor-aware stitching, plus stable LOD transitions.
-8. **Scale testing:** progressively test 64, 128, 256, 512, and 1,024 LOD chunks on real devices.
+5. **Seams:** optional downward boundary skirts for each edge of a regular heightfield mesh.
+6. **Bedrock bridge:** acquire terrain data through a verified launcher/game interface.
+7. **Renderer:** upload and draw LOD meshes with correct GPU resource ownership.
+8. **Transitions and scale tests:** neighbor-aware LOD changes and progressive testing at 64, 128, 256, 512, and 1,024 tiles.
 
 ## Streaming API notes
 
@@ -54,6 +54,7 @@ The inspected public Preloader interfaces establish native mod lifecycle and men
 - \`restore_cached\` and \`persist\` perform disk I/O. Run them on a background thread, not the render thread.
 - Cache restore is explicit because the cache cannot know whether a saved world tile has changed. The game adapter must validate world identity/revision before restoring.
 - \`QualityController::observe_frame\` should receive one frame-time sample per frame. Pass its recommended sample step into \`LodStreamer::submit\`.
+- \`append_edge_skirts\` appends duplicate lowered edge vertices and side triangles to a regular row-major tile mesh. The renderer should enable a consistent winding/culling policy.
 
 ## Resource-safety notes
 
