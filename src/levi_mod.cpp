@@ -76,31 +76,33 @@ public:
         return mod;
     }
 
-    LeviDistantHorizonMod() : self_(*ll::mod::NativeMod::current()) {}
+    LeviDistantHorizonMod() = default;
 
     bool load() {
+        self_ = ll::mod::NativeMod::current();
+        if (!self_) return false;
         try {
             std::lock_guard lock(config_mutex_);
             config_file_.emplace();
             if (!config_file_->load()) {
-                self_.getLogger().error("Could not load Levi Distant Horizon settings.");
+                self_->getLogger().error("Could not load Levi Distant Horizon settings.");
                 config_file_.reset();
                 return false;
             }
 
             normalize(config_file_->value());
             if (!config_file_->save()) {
-                self_.getLogger().warn("Could not normalize and save settings.");
+                self_->getLogger().warn("Could not normalize and save settings.");
             }
 
             rebuildCacheLocked();
-            self_.getLogger().info("Levi Distant Horizon {} loaded.", self_.getVersion());
-            self_.getLogger().warn(
+            self_->getLogger().info("Levi Distant Horizon {} loaded.", self_->getVersion());
+            self_->getLogger().warn(
                 "Settings are saved and editable, but live chunk capture and terrain rendering "
                 "still require a verified Minecraft adapter.");
             return true;
         } catch (...) {
-            self_.getLogger().error("Failed to initialize Levi Distant Horizon.");
+            self_->getLogger().error("Failed to initialize Levi Distant Horizon.");
             chunk_cache_.reset();
             config_file_.reset();
             return false;
@@ -108,11 +110,13 @@ public:
     }
 
     bool enable() {
+        self_ = ll::mod::NativeMod::current();
+        if (!self_) return false;
         const LeviSettings settings = snapshotSettings();
 
         const bool lodRegistered =
             pl::modmenu::ModuleBuilder(std::string(kLodModuleId), "LOD Chunks")
-                .modId(self_.getId())
+                .modId(self_->getId())
                 .description("Configure the distant LOD chunk radius and mesh detail.")
                 .defaultEnabled(settings.lodEnabled)
                 .onToggle(onModuleToggle)
@@ -130,7 +134,7 @@ public:
 
         const bool fakeRegistered =
             pl::modmenu::ModuleBuilder(std::string(kFakeModuleId), "Fake Distant Chunks")
-                .modId(self_.getId())
+                .modId(self_->getId())
                 .description("Distant-Horizons-style simplified chunk distance and detail settings.")
                 .defaultEnabled(settings.fakeChunksEnabled)
                 .onToggle(onModuleToggle)
@@ -145,7 +149,7 @@ public:
 
         const bool bobbyRegistered =
             pl::modmenu::ModuleBuilder(std::string(kBobbyModuleId), "Bobby Chunk Cache")
-                .modId(self_.getId())
+                .modId(self_->getId())
                 .description("Configure the Bobby-inspired in-memory chunk snapshot cache.")
                 .defaultEnabled(settings.bobbyCacheEnabled)
                 .onToggle(onModuleToggle)
@@ -161,28 +165,32 @@ public:
         const bool registered = lodRegistered && fakeRegistered && bobbyRegistered;
         if (!registered) {
             unregisterSettings();
-            self_.getLogger().error(
+            self_->getLogger().error(
                 "Settings registration failed (LOD={}, fake chunks={}, Bobby={}).",
                 lodRegistered, fakeRegistered, bobbyRegistered);
             return false;
         }
 
-        self_.getLogger().info("Registered LOD, fake chunk, and Bobby cache settings.");
-        self_.getLogger().warn(
+        self_->getLogger().info("Registered LOD, fake chunk, and Bobby cache settings.");
+        self_->getLogger().warn(
             "The settings currently configure saved mod state and the RAM cache; "
             "they do not activate distant terrain rendering without the game adapter.");
         return true;
     }
 
     bool disable() {
+        self_ = ll::mod::NativeMod::current();
+        if (!self_) return false;
         unregisterSettings();
         std::lock_guard lock(config_mutex_);
         if (chunk_cache_) chunk_cache_->clear();
-        self_.getLogger().info("Levi Distant Horizon disabled.");
+        self_->getLogger().info("Levi Distant Horizon disabled.");
         return true;
     }
 
     bool unload() {
+        self_ = ll::mod::NativeMod::current();
+        if (!self_) return false;
         unregisterSettings();
         std::lock_guard lock(config_mutex_);
         if (chunk_cache_) {
@@ -190,12 +198,12 @@ public:
             chunk_cache_.reset();
         }
         config_file_.reset();
-        self_.getLogger().info("Levi Distant Horizon unloaded.");
+        self_->getLogger().info("Levi Distant Horizon unloaded.");
         return true;
     }
 
 private:
-    ll::mod::NativeMod &self_;
+    ll::mod::NativeMod *self_{};
     std::mutex config_mutex_;
     std::optional<pl::config::ConfigFile<LeviSettings>> config_file_;
     std::unique_ptr<ldh::MemoryChunkCache> chunk_cache_;
@@ -230,9 +238,9 @@ private:
         normalize(config_file_->value());
         const bool saved = config_file_->save();
         if (saved) {
-            self_.getLogger().info("Saved settings after {}.", reason);
+            self_->getLogger().info("Saved settings after {}.", reason);
         } else {
-            self_.getLogger().warn("Could not save settings after {}.", reason);
+            self_->getLogger().warn("Could not save settings after {}.", reason);
         }
         return saved;
     }
@@ -263,7 +271,7 @@ private:
             } catch (...) {
                 settings.bobbyCacheEnabled = false;
                 chunk_cache_.reset();
-                self_.getLogger().error("Could not resize the Bobby cache.");
+                self_->getLogger().error("Could not resize the Bobby cache.");
             }
         } else {
             return;
@@ -318,7 +326,7 @@ private:
             } catch (...) {
                 settings.bobbyCacheEnabled = false;
                 chunk_cache_.reset();
-                self_.getLogger().error("Could not apply the new Bobby cache limits.");
+                self_->getLogger().error("Could not apply the new Bobby cache limits.");
             }
         }
         saveLocked(key);
@@ -335,3 +343,4 @@ private:
 
 PL_REGISTER_MOD(ldh::integration::LeviDistantHorizonMod,
                 ldh::integration::LeviDistantHorizonMod::instance())
+
