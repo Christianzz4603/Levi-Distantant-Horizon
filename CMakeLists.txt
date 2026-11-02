@@ -10,6 +10,7 @@ add_library(ldh_core
   src/terrain_cache.cpp
   src/lod_streamer.cpp
   src/quality_controller.cpp
+  src/performance_governor.cpp
   src/mesh_seams.cpp
   src/memory_chunk_cache.cpp
 )
@@ -41,6 +42,9 @@ if(LDH_BUILD_TESTS AND NOT ANDROID)
   add_executable(ldh_quality_tests tests/quality_controller_tests.cpp)
   target_link_libraries(ldh_quality_tests PRIVATE ldh_core)
   add_test(NAME ldh_quality_tests COMMAND ldh_quality_tests)
+  add_executable(ldh_performance_tests tests/performance_governor_tests.cpp)
+  target_link_libraries(ldh_performance_tests PRIVATE ldh_core)
+  add_test(NAME ldh_performance_tests COMMAND ldh_performance_tests)
   add_executable(ldh_seam_tests tests/mesh_seams_tests.cpp)
   target_link_libraries(ldh_seam_tests PRIVATE ldh_core)
   add_test(NAME ldh_seam_tests COMMAND ldh_seam_tests)
@@ -75,9 +79,6 @@ if(LDH_BUILD_LEVI_MOD)
   )
   target_link_options(levi_distant_horizon PRIVATE "-Wl,-z,max-page-size=16384")
 
-  # Config.hpp is a public Preloader header but includes these dependencies
-  # directly. Preloader 0.2.2 links them privately, so consumers must expose
-  # the same header-only targets when using ConfigFile<T>.
   target_link_libraries(levi_distant_horizon PRIVATE
     ldh_core
     preloader
