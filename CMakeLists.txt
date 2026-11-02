@@ -1,7 +1,13 @@
 cmake_minimum_required(VERSION 3.20)
-project(LeviDistantHorizon VERSION 0.3.0 LANGUAGES CXX)
+project(LeviDistantHorizon VERSION 0.4.0 LANGUAGES CXX)
 option(LDH_BUILD_TESTS "Build core tests" ON)
-add_library(ldh_core src/lod_mesh.cpp src/lod_scheduler.cpp src/terrain_cache.cpp)
+add_library(ldh_core
+  src/lod_mesh.cpp
+  src/lod_scheduler.cpp
+  src/terrain_cache.cpp
+  src/lod_streamer.cpp
+  src/quality_controller.cpp
+)
 target_include_directories(ldh_core PUBLIC include)
 target_compile_features(ldh_core PUBLIC cxx_std_20)
 set_target_properties(ldh_core PROPERTIES CXX_EXTENSIONS OFF POSITION_INDEPENDENT_CODE ON)
@@ -23,4 +29,10 @@ if(LDH_BUILD_TESTS)
   add_executable(ldh_cache_tests tests/terrain_cache_tests.cpp)
   target_link_libraries(ldh_cache_tests PRIVATE ldh_core)
   add_test(NAME ldh_cache_tests COMMAND ldh_cache_tests)
+  add_executable(ldh_streamer_tests tests/lod_streamer_tests.cpp)
+  target_link_libraries(ldh_streamer_tests PRIVATE ldh_core)
+  add_test(NAME ldh_streamer_tests COMMAND ldh_streamer_tests)
+  add_executable(ldh_quality_tests tests/quality_controller_tests.cpp)
+  target_link_libraries(ldh_quality_tests PRIVATE ldh_core)
+  add_test(NAME ldh_quality_tests COMMAND ldh_quality_tests)
 endif()

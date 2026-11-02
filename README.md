@@ -4,9 +4,9 @@ A native Level-of-Detail (LOD) terrain project for LeviLauncher and Minecraft Be
 
 ## Current status
 
-**Milestone 3: bounded terrain cache.** The C++20 core includes heightfield mesh generation, a bounded priority worker pool, cooperative job cancellation, and a persistent per-world tile mesh cache with a size budget and oldest-first pruning. GitHub Actions builds and tests the native core.
+**Milestone 4: asynchronous tile streaming and adaptive quality core.** The C++20 core includes heightfield mesh generation, a bounded priority worker pool, cooperative cancellation, a persistent per-world tile mesh cache, a bounded resident-tile streamer, explicit cache restore/persist operations, and a frame-time quality controller.
 
-This remains a renderer-independent core. It does not yet hook into Minecraft's world renderer or read live Bedrock chunks.
+The streamer accepts terrain snapshots supplied by a future game/launcher adapter, builds LOD meshes away from the caller thread, drops work outside the current focus region, and keeps a bounded resident set. It does not itself read Minecraft chunks or draw GPU geometry.
 
 ## Goals
 
@@ -23,25 +23,37 @@ A sustained 90 FPS is a performance target, not a universal guarantee. Device GP
 
 Requires CMake 3.20+ and a C++20 compiler.
 
-```sh
+\`\`\`sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --parallel 2
 ctest --test-dir build --output-on-failure
-```
+\`\`\`
 
 ## Android build
 
-The core is platform-independent and can be cross-compiled with the Android NDK CMake toolchain. The actual LeviLauncher mod target will be added after the exact Preloader SDK version, headers, sample mod, and supported Minecraft ABI/API are verified.
+The platform-independent core is position-independent and can be cross-compiled with the Android NDK CMake toolchain. The official [Preloader Android SDK](https://github.com/LiteLDev/preloader-android) provides native mod lifecycle and mod-menu APIs. The sample verified during this milestone uses SDK tag 0.2.2.
+
+The inspected public Preloader interfaces establish native mod lifecycle and menu/overlay functionality. They do not establish a supported API for acquiring live chunk heightfields or submitting arbitrary 3D terrain meshes to Minecraft's world renderer. Those integrations must target a verified game/renderer interface, not guessed offsets.
 
 ## Architecture roadmap
 
 1. **LOD core:** heightfield sampling, simplified mesh generation, validation, and tests.
-2. **Streaming:** bounded worker pool, prioritized jobs, cancellation, and queue limits.
-3. **Cache:** versioned per-world LOD meshes with size limits, integrity checks, and safe pruning.
-4. **Bedrock bridge:** acquire terrain data through supported launcher/game interfaces.
-5. **Renderer:** upload and draw LOD meshes with correct GPU resource ownership.
-6. **Adaptive quality:** distance bands, frame-time budgeting, and profiling.
-7. **Scale testing:** progressively test 64, 128, 256, 512, and 1,024 LOD chunks on real devices.
+2. **Streaming:** bounded worker pool, prioritized jobs, cancellation, focus-region eviction, and resident tile limits.
+3. **Cache:** versioned per-world LOD meshes with size limits, integrity checks, and explicit background I/O.
+4. **Quality control:** frame-time EMA, hysteretic detail reduction/recovery, distance-based sample steps, and work-budget recommendations.
+5. **Bedrock bridge:** acquire terrain data through a verified launcher/game interface.
+6. **Renderer:** upload and draw LOD meshes with correct GPU resource ownership.
+7. **Seams and transitions:** skirts or neighbor-aware stitching, plus stable LOD transitions.
+8. **Scale testing:** progressively test 64, 128, 256, 512, and 1,024 LOD chunks on real devices.
+
+## Streaming API notes
+
+- Feed captured tile snapshots to \`LodStreamer::submit\` with a world ID, tile coordinates, LOD level, sample step, priority, and caller-maintained revision.
+- Call \`set_focus\` as the player moves. Work and resident tiles outside the square focus radius are cancelled or evicted.
+- Call \`poll\` from the update loop. It only consumes completed futures and never waits for worker completion.
+- \`restore_cached\` and \`persist\` perform disk I/O. Run them on a background thread, not the render thread.
+- Cache restore is explicit because the cache cannot know whether a saved world tile has changed. The game adapter must validate world identity/revision before restoring.
+- \`QualityController::observe_frame\` should receive one frame-time sample per frame. Pass its recommended sample step into \`LodStreamer::submit\`.
 
 ## Resource-safety notes
 
@@ -50,10 +62,11 @@ The core is platform-independent and can be cross-compiled with the Android NDK 
 - Queued and running jobs can be cancelled between mesh rows.
 - Cache files use a versioned binary format and CRC32 integrity checks.
 - Cache size and per-entry size are bounded; oldest entries are pruned first.
+- Resident meshes and pending tile jobs have independent hard limits.
 
 ## Compatibility and scope
 
-The LOD core contains no Minecraft code, game assets, or proprietary renderer hooks. Bedrock integration must target documented and verified LeviLauncher Preloader interfaces. Unsupported private offsets and guessed hooks are intentionally avoided.
+The core contains no Minecraft code, game assets, or proprietary renderer hooks. Bedrock integration must target documented and verified interfaces. Existing community mods demonstrate version-specific signature/offset techniques, but those are not treated as a stable public renderer contract by this project.
 
 ## License
 

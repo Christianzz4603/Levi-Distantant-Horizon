@@ -5,7 +5,13 @@
 #include <mutex>
 #include <string>
 namespace ldh {
-struct TerrainTileKey { std::string world_id; std::int32_t x{}; std::int32_t z{}; std::uint32_t lod{}; };
+struct TerrainTileKey {
+    std::string world_id;
+    std::int32_t x{};
+    std::int32_t z{};
+    std::uint32_t lod{};
+    friend bool operator==(const TerrainTileKey&, const TerrainTileKey&) = default;
+};
 enum class CacheError { None, NotFound, InvalidKey, CorruptData, EntryTooLarge, IoError, AllocationFailed };
 struct CacheResult { Mesh mesh; CacheError error{CacheError::None}; [[nodiscard]] explicit operator bool() const noexcept { return error == CacheError::None; } };
 struct TerrainCacheConfig {
