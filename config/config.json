@@ -10,4 +10,7 @@
   "bobbyCacheEnabled": true,
   "bobbyCacheMemoryMb": 16,
   "bobbyCacheMaxEntries": 256
+,
+  "inputDiagnosticsEnabled": true,
+  "stalePointerThresholdMs": 2500
 }

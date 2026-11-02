@@ -16,7 +16,7 @@ GitHub Actions builds and validates the package. Import the generated `.levipack
 
 ## New settings
 
-The mod now registers three editable Mod Menu modules and persists their values in `config/config.json`:
+The mod now registers four editable Mod Menu modules and persists their values in `config/config.json`:
 
 ### LOD Chunks
 - Enable/disable the LOD module.
@@ -34,7 +34,13 @@ The mod now registers three editable Mod Menu modules and persists their values 
 - Set its memory budget from 4 to 256 MiB.
 - Set its maximum entry count from 32 to 4096.
 
-Settings are available in LeviLauncher’s native Mod Menu and are saved automatically. The Bobby RAM cache is the only one of these settings currently connected to a live core component: changing its budget or entry limit rebuilds the bounded in-memory LRU cache.
+### Input Diagnostics
+- Passively observes Android touch down, up, move, pointer, and cancel events through the public Preloader Input API.
+- Tracks unmatched releases, duplicate downs, active pointers, and long-held pointers.
+- Prints a compact summary to the mod log when the module is disabled or the mod unloads.
+- Never consumes or synthesizes touch events, changes attack timing, alters block placement cadence, or modifies server-authoritative combat.
+
+Settings are available in LeviLauncher’s native Mod Menu and are saved automatically. The Bobby RAM cache and passive input diagnostics are connected to live components. Input diagnostics are measurement-only: they can reveal missing or unusually long touch sequences, but cannot repair Minecraft’s internal button state through the current public callback API.
 
 ## Important implementation status
 
@@ -43,7 +49,7 @@ This is a loadable Preloader-native module with a renderer-independent C++20 LOD
 Consequently:
 - LOD radius, LOD detail, adaptive quality, and fake-chunk distance/detail are persisted settings for the future terrain adapter. They do not currently change what appears in the world.
 - The Bobby-inspired RAM cache is configurable and initialized, but it receives no terrain snapshots until a verified chunk-capture adapter exists.
-- No private game offsets or unverified hooks are installed.
+- No private game offsets or unverified hooks are installed. The current Preloader 0.2.2 Input API exposes observation/consumption callbacks but no supported API for synthesizing a missing touch-up event or resetting Minecraft’s internal attack-button state.
 - An empty `minecraft_versions` manifest allowlist is not a claim of compatibility with every game build. Runtime compatibility must be verified against the matching LeviLauncher/Preloader and Minecraft build.
 
 ## Native core
@@ -80,5 +86,7 @@ The package is written to `build-android/Levi-Distant-Horizon-0.8.0-arm64-v8a.le
 1. Verify the native package loads in LeviLauncher.
 2. Identify a supported, version-verified way to capture loaded terrain.
 3. Feed captured heightfields into the RAM cache and LOD streamer.
-4. Integrate mesh upload and rendering through a verified game-renderer interface.
-5. Test transitions, memory limits, and frame-time behavior on low-end Android devices.
+4. Verify 26.60 game-thread, block-update, and renderer hook points before attempting RenderSync.
+5. Investigate safe touch-state recovery and frame-pacing integration; do not bypass server-authoritative combat timing.
+6. Integrate mesh upload and rendering through a verified game-renderer interface.
+7. Test input, rendering, transitions, memory limits, and frame-time behavior on low-end Android devices.

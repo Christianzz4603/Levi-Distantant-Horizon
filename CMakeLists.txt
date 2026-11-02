@@ -13,6 +13,7 @@ add_library(ldh_core
   src/performance_governor.cpp
   src/mesh_seams.cpp
   src/memory_chunk_cache.cpp
+  src/input_diagnostics.cpp
 )
 target_include_directories(ldh_core PUBLIC include)
 target_compile_features(ldh_core PUBLIC cxx_std_20)
@@ -51,6 +52,9 @@ if(LDH_BUILD_TESTS AND NOT ANDROID)
   add_executable(ldh_memory_chunk_cache_tests tests/memory_chunk_cache_tests.cpp)
   target_link_libraries(ldh_memory_chunk_cache_tests PRIVATE ldh_core)
   add_test(NAME ldh_memory_chunk_cache_tests COMMAND ldh_memory_chunk_cache_tests)
+  add_executable(ldh_input_diagnostics_tests tests/input_diagnostics_tests.cpp)
+  target_link_libraries(ldh_input_diagnostics_tests PRIVATE ldh_core)
+  add_test(NAME ldh_input_diagnostics_tests COMMAND ldh_input_diagnostics_tests)
 endif()
 
 if(LDH_BUILD_LEVI_MOD)
@@ -60,6 +64,8 @@ if(LDH_BUILD_LEVI_MOD)
   if(NOT CMAKE_ANDROID_ARCH_ABI STREQUAL "arm64-v8a")
     message(FATAL_ERROR "Levi Distant Horizon currently packages arm64-v8a only.")
   endif()
+
+  find_library(ANDROID_LOG_LIBRARY log REQUIRED)
 
   include(FetchContent)
   FetchContent_Declare(
@@ -85,6 +91,7 @@ if(LDH_BUILD_LEVI_MOD)
     Boost::pfr
     magic_enum::magic_enum
     nlohmann_json::nlohmann_json
+    ${ANDROID_LOG_LIBRARY}
   )
 
   set(LEVI_MOD_ID "levi_distant_horizon")

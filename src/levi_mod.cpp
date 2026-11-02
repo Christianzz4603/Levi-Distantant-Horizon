@@ -1,6 +1,9 @@
 #include "ldh/memory_chunk_cache.hpp"
+#include "ldh/input_diagnostics.hpp"
 
 #include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <cerrno>
 #include <cstdlib>
 #include <limits>
@@ -13,6 +16,7 @@
 #include <pl/Config.hpp>
 #include <pl/Mod.hpp>
 #include <pl/ModMenu.hpp>
+#include <pl/Input.hpp>
 
 namespace ldh::integration {
 namespace {
@@ -20,6 +24,7 @@ namespace {
 constexpr std::string_view kLodModuleId = "levi_distant_horizon.lod";
 constexpr std::string_view kFakeModuleId = "levi_distant_horizon.fake_chunks";
 constexpr std::string_view kBobbyModuleId = "levi_distant_horizon.bobby_cache";
+constexpr std::string_view kInputModuleId = "levi_distant_horizon.input_diagnostics";
 
 struct LeviSettings {
     int version = 1;
@@ -36,6 +41,9 @@ struct LeviSettings {
     bool bobbyCacheEnabled = true;
     int bobbyCacheMemoryMb = 16;
     int bobbyCacheMaxEntries = 256;
+
+    bool inputDiagnosticsEnabled = true;
+    int stalePointerThresholdMs = 2500;
 };
 
 int parseInt(std::string_view value, int fallback) {
@@ -65,6 +73,7 @@ void normalize(LeviSettings &settings) {
     settings.fakeChunkDetail = std::clamp(settings.fakeChunkDetail, 1, 16);
     settings.bobbyCacheMemoryMb = std::clamp(settings.bobbyCacheMemoryMb, 4, 256);
     settings.bobbyCacheMaxEntries = std::clamp(settings.bobbyCacheMaxEntries, 32, 4096);
+    settings.stalePointerThresholdMs = std::clamp(settings.stalePointerThresholdMs, 250, 10000);
 }
 
 } // namespace
@@ -96,6 +105,11 @@ public:
             }
 
             rebuildCacheLocked();
+            input_diagnostics_.reset();
+            input_diagnostics_.setStaleThreshold(
+                std::chrono::milliseconds(config_file_->value().stalePointerThresholdMs));
+            input_diagnostics_.setEnabled(config_file_->value().inputDiagnosticsEnabled);
+            registerInputCallbackOnce();
             self_->getLogger().info("Levi Distant Horizon {} loaded.", self_->getVersion());
             self_->getLogger().warn(
                 "Settings are saved and editable, but live chunk capture and terrain rendering "
@@ -162,16 +176,30 @@ public:
                 .onConfigChanged(onConfigChanged)
                 .registerModule();
 
-        const bool registered = lodRegistered && fakeRegistered && bobbyRegistered;
+        const bool inputRegistered =
+            pl::modmenu::ModuleBuilder(std::string(kInputModuleId), "Input Diagnostics")
+                .modId(self_->getId())
+                .description("Passively tracks touch down/up/cancel events to diagnose stuck controls. Does not alter input or combat timing.")
+                .defaultEnabled(settings.inputDiagnosticsEnabled)
+                .onToggle(onModuleToggle)
+                .config("stalePointerThresholdMs", "Long-held Touch Warning (ms)",
+                        pl::modmenu::ConfigType::SliderInt,
+                        std::to_string(settings.stalePointerThresholdMs), "250", "10000")
+                .onConfigChanged(onConfigChanged)
+                .registerModule();
+
+        const bool registered = lodRegistered && fakeRegistered && bobbyRegistered && inputRegistered;
         if (!registered) {
             unregisterSettings();
             self_->getLogger().error(
-                "Settings registration failed (LOD={}, fake chunks={}, Bobby={}).",
-                lodRegistered, fakeRegistered, bobbyRegistered);
+                "Settings registration failed (LOD={}, fake chunks={}, Bobby={}, input diagnostics={}).",
+                lodRegistered, fakeRegistered, bobbyRegistered, inputRegistered);
             return false;
         }
 
-        self_->getLogger().info("Registered LOD, fake chunk, and Bobby cache settings.");
+        input_diagnostics_.setStaleThreshold(std::chrono::milliseconds(settings.stalePointerThresholdMs));
+        input_diagnostics_.setEnabled(settings.inputDiagnosticsEnabled);
+        self_->getLogger().info("Registered LOD, fake chunk, Bobby cache, and input diagnostics settings.");
         self_->getLogger().warn(
             "The settings currently configure saved mod state and the RAM cache; "
             "they do not activate distant terrain rendering without the game adapter.");
@@ -182,6 +210,9 @@ public:
         self_ = ll::mod::NativeMod::current();
         if (!self_) return false;
         unregisterSettings();
+        input_diagnostics_.setEnabled(false);
+        logInputSummary();
+        input_diagnostics_.reset();
         std::lock_guard lock(config_mutex_);
         if (chunk_cache_) chunk_cache_->clear();
         self_->getLogger().info("Levi Distant Horizon disabled.");
@@ -192,6 +223,9 @@ public:
         self_ = ll::mod::NativeMod::current();
         if (!self_) return false;
         unregisterSettings();
+        input_diagnostics_.setEnabled(false);
+        logInputSummary();
+        input_diagnostics_.reset();
         std::lock_guard lock(config_mutex_);
         if (chunk_cache_) {
             chunk_cache_->clear();
@@ -207,6 +241,8 @@ private:
     std::mutex config_mutex_;
     std::optional<pl::config::ConfigFile<LeviSettings>> config_file_;
     std::unique_ptr<ldh::MemoryChunkCache> chunk_cache_;
+    ldh::InputDiagnostics input_diagnostics_;
+    std::once_flag input_callback_once_;
 
     LeviSettings snapshotSettings() {
         std::lock_guard lock(config_mutex_);
@@ -214,6 +250,26 @@ private:
         LeviSettings snapshot = config_file_->value();
         normalize(snapshot);
         return snapshot;
+    }
+
+    void registerInputCallbackOnce() {
+        std::call_once(input_callback_once_, [] {
+            pl::input::registerTouchCallback([](const pl::input::TouchEvent &event) {
+                auto &mod = instance();
+                mod.input_diagnostics_.observe(event.action, event.pointerId);
+                return false; // Observe only. Never consume gameplay touch events.
+            });
+        });
+    }
+
+    void logInputSummary() {
+        if (!self_) return;
+        const auto stats = input_diagnostics_.snapshot();
+        self_->getLogger().info(
+            "Touch diagnostics: events={}, down={}, up={}, cancel={}, unmatched-up={}, duplicate-down={}, active={}, possibly-stuck={}, avg-press={}ms, max-press={}ms",
+            stats.events, stats.downs, stats.ups, stats.cancels, stats.unmatchedUps,
+            stats.duplicateDowns, stats.activePointers, stats.possiblyStuckPointers,
+            stats.averagePressDurationMs, stats.maximumPressDurationMs);
     }
 
     void rebuildCacheLocked() {
@@ -273,6 +329,13 @@ private:
                 chunk_cache_.reset();
                 self_->getLogger().error("Could not resize the Bobby cache.");
             }
+        } else if (module_id == kInputModuleId) {
+            settings.inputDiagnosticsEnabled = enabled;
+            input_diagnostics_.setEnabled(enabled);
+            if (!enabled) {
+                logInputSummary();
+                input_diagnostics_.reset();
+            }
         } else {
             return;
         }
@@ -315,11 +378,21 @@ private:
             } else {
                 return;
             }
+        } else if (module_id == kInputModuleId) {
+            if (key == "stalePointerThresholdMs") {
+                settings.stalePointerThresholdMs = parseInt(value, settings.stalePointerThresholdMs);
+            } else {
+                return;
+            }
         } else {
             return;
         }
 
         normalize(settings);
+        if (module_id == kInputModuleId) {
+            input_diagnostics_.setStaleThreshold(
+                std::chrono::milliseconds(settings.stalePointerThresholdMs));
+        }
         if (cache_changed) {
             try {
                 rebuildCacheLocked();
@@ -336,6 +409,7 @@ private:
         pl::modmenu::unregisterModule(kLodModuleId);
         pl::modmenu::unregisterModule(kFakeModuleId);
         pl::modmenu::unregisterModule(kBobbyModuleId);
+        pl::modmenu::unregisterModule(kInputModuleId);
     }
 };
 
