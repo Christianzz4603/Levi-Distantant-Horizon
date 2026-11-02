@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.20)
-project(LeviDistantHorizon VERSION 0.5.0 LANGUAGES CXX)
+project(LeviDistantHorizon VERSION 0.6.0 LANGUAGES CXX)
 option(LDH_BUILD_TESTS "Build core tests" ON)
 add_library(ldh_core
   src/lod_mesh.cpp
@@ -8,6 +8,7 @@ add_library(ldh_core
   src/lod_streamer.cpp
   src/quality_controller.cpp
   src/mesh_seams.cpp
+  src/memory_chunk_cache.cpp
 )
 target_include_directories(ldh_core PUBLIC include)
 target_compile_features(ldh_core PUBLIC cxx_std_20)
@@ -39,4 +40,7 @@ if(LDH_BUILD_TESTS)
   add_executable(ldh_seam_tests tests/mesh_seams_tests.cpp)
   target_link_libraries(ldh_seam_tests PRIVATE ldh_core)
   add_test(NAME ldh_seam_tests COMMAND ldh_seam_tests)
+  add_executable(ldh_memory_chunk_cache_tests tests/memory_chunk_cache_tests.cpp)
+  target_link_libraries(ldh_memory_chunk_cache_tests PRIVATE ldh_core)
+  add_test(NAME ldh_memory_chunk_cache_tests COMMAND ldh_memory_chunk_cache_tests)
 endif()
