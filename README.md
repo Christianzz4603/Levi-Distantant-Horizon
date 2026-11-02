@@ -1,12 +1,18 @@
 # Levi Distant Horizon
 
-A native Level-of-Detail (LOD) terrain project for LeviLauncher and Minecraft Bedrock on Android.
+A native Level-of-Detail (LOD) terrain project for LeviLauncher and Minecraft Bedrock 26.60+ on Android.
 
 ## Current status
 
 **Milestone 5: bounded streaming, adaptive quality, and terrain seam geometry.** The C++20 core includes heightfield mesh generation, a bounded priority worker pool, cooperative cancellation, a persistent per-world tile mesh cache, a bounded resident-tile streamer, explicit cache restore/persist operations, a frame-time quality controller, and optional downward boundary skirts for LOD meshes.
 
 The streamer accepts terrain snapshots supplied by a future game/launcher adapter, builds LOD meshes away from the caller thread, drops work outside the current focus region, and keeps a bounded resident set. Skirts provide a geometry primitive for hiding small gaps between adjacent LOD tiles. The project still does not read Minecraft chunks or draw GPU geometry.
+
+## Target game versions
+
+- **Target:** Minecraft Bedrock **26.60 and newer (26.60+)**.
+- Earlier releases such as 26.2 are not the target for this project.
+- Compatibility with each 26.60+ release must be verified against the matching LeviLauncher/Preloader build and game interfaces before claiming support. The current native core is version-independent and is not yet connected to live Minecraft terrain or world rendering.
 
 ## Goals
 
