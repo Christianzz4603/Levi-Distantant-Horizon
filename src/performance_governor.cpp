@@ -2,7 +2,6 @@
 
 #include <algorithm>
 #include <cmath>
-#include <limits>
 
 namespace ldh {
 namespace {
@@ -96,11 +95,9 @@ void PerformanceGovernor::normalize() noexcept {
 }
 
 void PerformanceGovernor::set_profile(PerformanceProfile profile) noexcept {
-    const auto previous_step = state_.adaptive_sample_step;
     config_ = config_for(profile);
     normalize();
-    state_.adaptive_sample_step = std::clamp(
-        previous_step, config_.base_sample_step, config_.max_sample_step);
+    state_.adaptive_sample_step = config_.base_sample_step;
     state_.overloaded_frames = 0U;
     state_.headroom_frames = 0U;
 }
