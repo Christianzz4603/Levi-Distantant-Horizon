@@ -1,0 +1,27 @@
+cmake_minimum_required(VERSION 3.20)
+project(LeviDistantHorizon VERSION 0.1.0 LANGUAGES CXX)
+
+option(LDH_BUILD_TESTS "Build core tests" ON)
+
+add_library(ldh_core
+    src/lod_mesh.cpp
+)
+target_include_directories(ldh_core PUBLIC include)
+target_compile_features(ldh_core PUBLIC cxx_std_20)
+set_target_properties(ldh_core PROPERTIES
+    CXX_EXTENSIONS OFF
+    POSITION_INDEPENDENT_CODE ON
+)
+
+if(MSVC)
+    target_compile_options(ldh_core PRIVATE /W4 /permissive-)
+else()
+    target_compile_options(ldh_core PRIVATE -Wall -Wextra -Wpedantic -Wconversion -Wshadow)
+endif()
+
+if(LDH_BUILD_TESTS)
+    enable_testing()
+    add_executable(ldh_core_tests tests/lod_mesh_tests.cpp)
+    target_link_libraries(ldh_core_tests PRIVATE ldh_core)
+    add_test(NAME ldh_core_tests COMMAND ldh_core_tests)
+endif()
