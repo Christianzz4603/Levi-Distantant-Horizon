@@ -1,11 +1,9 @@
 name: Core CI
-
 on:
   push:
     branches: [main]
   pull_request:
   workflow_dispatch:
-
 jobs:
   linux:
     runs-on: ubuntu-latest

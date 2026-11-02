@@ -1,106 +1,50 @@
 #include "ldh/lod_mesh.hpp"
-
 #include <cmath>
 #include <limits>
-
-namespace ldh {
-namespace {
-
-[[nodiscard]] bool multiply_fits_size(std::size_t a, std::size_t b) noexcept {
-    return b == 0U || a <= std::numeric_limits<std::size_t>::max() / b;
+#include <new>
+namespace ldh { namespace {
+bool fits(std::size_t a, std::size_t b) noexcept { return b == 0U || a <= std::numeric_limits<std::size_t>::max() / b; }
+bool cancelled(const std::atomic_bool* flag) noexcept { return flag && flag->load(std::memory_order_relaxed); }
 }
-
-} // namespace
-
-MeshResult build_lod_mesh(const HeightField& field, std::uint32_t sample_step) {
-    MeshResult result{};
-
-    if (field.width < 2U || field.depth < 2U) {
-        result.error = MeshError::InvalidDimensions;
-        return result;
-    }
-
-    if (!std::isfinite(field.cell_size) || field.cell_size <= 0.0F) {
-        result.error = MeshError::InvalidCellSize;
-        return result;
-    }
-
-    if (sample_step == 0U) {
-        result.error = MeshError::InvalidSampleStep;
-        return result;
-    }
-
-    const auto expected = static_cast<std::size_t>(field.width) *
-                          static_cast<std::size_t>(field.depth);
-    if (!multiply_fits_size(field.width, field.depth) ||
-        field.heights.size() != expected) {
-        result.error = MeshError::HeightCountMismatch;
-        return result;
-    }
-
-    const std::uint32_t x_cells = field.width - 1U;
-    const std::uint32_t z_cells = field.depth - 1U;
-    const std::uint32_t x_segments = (x_cells + sample_step - 1U) / sample_step;
-    const std::uint32_t z_segments = (z_cells + sample_step - 1U) / sample_step;
-
-    const std::size_t vertex_count =
-        (static_cast<std::size_t>(x_segments) + 1U) *
-        (static_cast<std::size_t>(z_segments) + 1U);
-
-    if (vertex_count > static_cast<std::size_t>(
-                           std::numeric_limits<std::uint32_t>::max())) {
-        result.error = MeshError::TooManyVertices;
-        return result;
-    }
-
-    const std::size_t index_count =
-        static_cast<std::size_t>(x_segments) *
-        static_cast<std::size_t>(z_segments) * 6U;
-
-    result.mesh.vertices.reserve(vertex_count);
-    result.mesh.indices.reserve(index_count);
-
-    for (std::uint32_t z = 0U; z <= z_segments; ++z) {
-        const std::uint32_t source_z =
-            (z == z_segments) ? z_cells : z * sample_step;
-
-        for (std::uint32_t x = 0U; x <= x_segments; ++x) {
-            const std::uint32_t source_x =
-                (x == x_segments) ? x_cells : x * sample_step;
-            const std::size_t source_index =
-                static_cast<std::size_t>(source_z) * field.width + source_x;
-            const float height = field.heights[source_index];
-
-            if (!std::isfinite(height)) {
-                result.mesh = {};
-                result.error = MeshError::HeightCountMismatch;
-                return result;
+MeshResult build_lod_mesh(const HeightField& field, std::uint32_t step, const std::atomic_bool* cancel_flag) {
+    MeshResult out{};
+    if (cancelled(cancel_flag)) { out.error = MeshError::Cancelled; return out; }
+    if (field.width < 2U || field.depth < 2U) { out.error = MeshError::InvalidDimensions; return out; }
+    if (!std::isfinite(field.cell_size) || field.cell_size <= 0.0F) { out.error = MeshError::InvalidCellSize; return out; }
+    if (step == 0U) { out.error = MeshError::InvalidSampleStep; return out; }
+    const std::size_t w = field.width, d = field.depth;
+    if (!fits(w, d) || field.heights.size() != w * d) { out.error = MeshError::HeightCountMismatch; return out; }
+    const std::uint32_t xc = field.width - 1U, zc = field.depth - 1U;
+    const std::uint32_t xs = 1U + (xc - 1U) / step, zs = 1U + (zc - 1U) / step;
+    const std::size_t cols = static_cast<std::size_t>(xs) + 1U, rows = static_cast<std::size_t>(zs) + 1U;
+    if (!fits(cols, rows)) { out.error = MeshError::TooManyVertices; return out; }
+    const std::size_t vertices = cols * rows;
+    std::size_t cells = 0U;
+    if (vertices > std::numeric_limits<std::uint32_t>::max() || !fits(xs, zs)) { out.error = MeshError::TooManyVertices; return out; }
+    cells = static_cast<std::size_t>(xs) * zs;
+    if (!fits(cells, 6U)) { out.error = MeshError::TooManyVertices; return out; }
+    try {
+        out.mesh.vertices.reserve(vertices);
+        out.mesh.indices.reserve(cells * 6U);
+        for (std::uint32_t z = 0U; z <= zs; ++z) {
+            if (cancelled(cancel_flag)) { out.mesh = {}; out.error = MeshError::Cancelled; return out; }
+            const std::uint32_t sz = z == zs ? zc : z * step;
+            for (std::uint32_t x = 0U; x <= xs; ++x) {
+                const std::uint32_t sx = x == xs ? xc : x * step;
+                const float h = field.heights[static_cast<std::size_t>(sz) * w + sx];
+                if (!std::isfinite(h)) { out.mesh = {}; out.error = MeshError::HeightCountMismatch; return out; }
+                out.mesh.vertices.push_back({static_cast<float>(sx) * field.cell_size, h, static_cast<float>(sz) * field.cell_size});
             }
-
-            result.mesh.vertices.push_back(Vertex{
-                static_cast<float>(source_x) * field.cell_size,
-                height,
-                static_cast<float>(source_z) * field.cell_size
-            });
         }
-    }
-
-    const std::uint32_t row_width = x_segments + 1U;
-    for (std::uint32_t z = 0U; z < z_segments; ++z) {
-        for (std::uint32_t x = 0U; x < x_segments; ++x) {
-            const std::uint32_t top_left = z * row_width + x;
-            const std::uint32_t top_right = top_left + 1U;
-            const std::uint32_t bottom_left = top_left + row_width;
-            const std::uint32_t bottom_right = bottom_left + 1U;
-
-            result.mesh.indices.insert(result.mesh.indices.end(), {
-                top_left, bottom_left, top_right,
-                top_right, bottom_left, bottom_right
-            });
+        const std::uint32_t row_width = xs + 1U;
+        for (std::uint32_t z = 0U; z < zs; ++z) {
+            if (cancelled(cancel_flag)) { out.mesh = {}; out.error = MeshError::Cancelled; return out; }
+            for (std::uint32_t x = 0U; x < xs; ++x) {
+                const std::uint32_t tl = z * row_width + x, tr = tl + 1U, bl = tl + row_width, br = bl + 1U;
+                out.mesh.indices.insert(out.mesh.indices.end(), {tl, bl, tr, tr, bl, br});
+            }
         }
-    }
-
-    return result;
+    } catch (const std::bad_alloc&) { out.mesh = {}; out.error = MeshError::AllocationFailed; }
+    return out;
 }
-
 } // namespace ldh

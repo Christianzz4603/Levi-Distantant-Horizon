@@ -4,15 +4,17 @@ A native Level-of-Detail (LOD) terrain project for LeviLauncher and Minecraft Be
 
 ## Current status
 
-**Milestone 1: portable LOD mesh core.** This repository currently contains a renderer-independent C++20 heightfield mesh simplifier and automated tests. It does not yet hook into Minecraft's world renderer or read live Bedrock chunks.
+**Milestone 2: bounded asynchronous LOD scheduling.** The portable C++20 core includes heightfield mesh generation, a bounded worker pool, priority ordering, job cancellation, and per-job input budgets. GitHub Actions builds and runs the native tests.
+
+This remains a renderer-independent core. It does not yet hook into Minecraft's world renderer or read live Bedrock chunks.
 
 ## Goals
 
 - Render simplified terrain beyond the normal view distance.
-- Support configurable LOD coverage with a long-term target of 1,024 LOD chunks.
+- Support configurable LOD coverage, with a long-term target of 1,024 LOD chunks.
 - Keep terrain generation off the render thread.
 - Cache generated terrain per world.
-- Bound memory use, work queues, and GPU uploads for Android devices.
+- Bound memory, queued work, and worker concurrency for Android devices.
 - Adapt detail to measured frame time.
 
 A sustained 90 FPS is a performance target, not a universal guarantee. Device GPU, world complexity, thermal throttling, Minecraft version, and renderer integration all affect frame rate.
@@ -23,7 +25,7 @@ Requires CMake 3.20+ and a C++20 compiler.
 
 ```sh
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build --parallel
+cmake --build build --parallel 2
 ctest --test-dir build --output-on-failure
 ```
 
@@ -33,17 +35,25 @@ The core is platform-independent and can be cross-compiled with the Android NDK 
 
 ## Architecture roadmap
 
-1. **LOD core:** heightfield sampling, simplified mesh generation, validation and tests.
-2. **Streaming:** bounded worker pool, prioritized tile queue and cancellation.
+1. **LOD core:** heightfield sampling, simplified mesh generation, validation, and tests.
+2. **Streaming:** bounded worker pool, prioritized jobs, cancellation, and queue limits.
 3. **Cache:** versioned per-world LOD data with size limits and safe invalidation.
 4. **Bedrock bridge:** acquire terrain data through supported launcher/game interfaces.
 5. **Renderer:** upload and draw LOD meshes with correct GPU resource ownership.
-6. **Adaptive quality:** distance bands, frame-time budgeting and profiling.
-7. **Scale testing:** progressively test 64, 128, 256, 512 and 1,024 LOD chunks on real devices.
+6. **Adaptive quality:** distance bands, frame-time budgeting, and profiling.
+7. **Scale testing:** progressively test 64, 128, 256, 512, and 1,024 LOD chunks on real devices.
 
-## Scope and compatibility
+## Resource-safety notes
 
-The LOD mesh core does not contain Minecraft code, game assets, or proprietary renderer hooks. Bedrock integration must be implemented against documented and verified LeviLauncher Preloader interfaces. Unsupported private offsets or guessed hooks are intentionally avoided.
+- Defaults to two workers and eight queued jobs.
+- Worker count is capped at eight.
+- Each job has a configurable height-sample budget.
+- Queued and running jobs can be cancelled.
+- Mesh generation checks cancellation between rows and validates allocation sizes before reserving buffers.
+
+## Compatibility and scope
+
+The LOD core contains no Minecraft code, game assets, or proprietary renderer hooks. Bedrock integration must target documented and verified LeviLauncher Preloader interfaces. Unsupported private offsets or guessed hooks are intentionally avoided.
 
 ## License
 
