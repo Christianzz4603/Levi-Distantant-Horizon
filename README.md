@@ -16,7 +16,7 @@ GitHub Actions builds and validates the package. Import the generated `.levipack
 
 ## New settings
 
-The mod now registers four editable Mod Menu modules and persists their values in `config/config.json`:
+The mod registers four editable Mod Menu modules and persists their values in `config/config.json`:
 
 ### LOD Chunks
 - Enable/disable the LOD module.
@@ -40,7 +40,19 @@ The mod now registers four editable Mod Menu modules and persists their values i
 - Prints a compact summary to the mod log when the module is disabled or the mod unloads.
 - Never consumes or synthesizes touch events, changes attack timing, alters block placement cadence, or modifies server-authoritative combat.
 
-Settings are available in LeviLauncher’s native Mod Menu and are saved automatically. The Bobby RAM cache and passive input diagnostics are connected to live components. Input diagnostics are measurement-only: they can reveal missing or unusually long touch sequences, but cannot repair Minecraft’s internal button state through the current public callback API.
+Settings are available in LeviLauncher's native Mod Menu and are saved automatically. The Bobby RAM cache and passive input diagnostics are connected to live components. Input diagnostics are measurement-only: they can reveal missing or unusually long touch sequences, but cannot repair Minecraft's internal button state through the current public callback API.
+
+## SIG-first discovery foundation
+
+LeviLauncher mod targets should be discovered from signatures rather than fixed offsets. The core now includes a bounded signature parser and executable-span scanner:
+
+- Accepts whitespace-separated byte patterns such as `FD 7B BF A9 ?? ?? 01 91`.
+- Supports full-byte wildcards (`?` or `??`).
+- Rejects malformed and oversized patterns.
+- Reports a target only when exactly one match exists in the supplied executable byte span.
+- Fails closed on missing or ambiguous matches.
+
+This is the reusable resolver foundation only. It does not yet read Minecraft process memory, load Zaphkiel's `signature.json`, install hooks, or claim any game function has been identified. A runtime adapter must first validate the Minecraft build (26.60), select the correct executable mapping, resolve a unique signature, and verify the candidate before any hook is considered. No guessed offsets are shipped.
 
 ## Important implementation status
 
@@ -49,12 +61,12 @@ This is a loadable Preloader-native module with a renderer-independent C++20 LOD
 Consequently:
 - LOD radius, LOD detail, adaptive quality, and fake-chunk distance/detail are persisted settings for the future terrain adapter. They do not currently change what appears in the world.
 - The Bobby-inspired RAM cache is configurable and initialized, but it receives no terrain snapshots until a verified chunk-capture adapter exists.
-- No private game offsets or unverified hooks are installed. The current Preloader 0.2.2 Input API exposes observation/consumption callbacks but no supported API for synthesizing a missing touch-up event or resetting Minecraft’s internal attack-button state.
+- No private game offsets or unverified hooks are installed. The current Preloader 0.2.2 Input API exposes observation/consumption callbacks but no supported API for synthesizing a missing touch-up event or resetting Minecraft's internal attack-button state.
 - An empty `minecraft_versions` manifest allowlist is not a claim of compatibility with every game build. Runtime compatibility must be verified against the matching LeviLauncher/Preloader and Minecraft build.
 
 ## Native core
 
-The renderer-independent C++20 core currently provides heightfield-to-LOD mesh generation, bounded priority scheduling and cooperative cancellation, a persistent per-world terrain mesh cache, bounded LOD tile streaming, adaptive quality control, optional boundary skirts, and a bounded RAM-only LRU terrain snapshot cache.
+The renderer-independent C++20 core currently provides heightfield-to-LOD mesh generation, bounded priority scheduling and cooperative cancellation, a persistent per-world terrain mesh cache, bounded LOD tile streaming, adaptive quality control, optional boundary skirts, a bounded RAM-only LRU terrain snapshot cache, passive input telemetry, and fail-closed signature parsing/resolution.
 
 ## Build and test the core on Linux
 
@@ -84,9 +96,9 @@ The package is written to `build-android/Levi-Distant-Horizon-0.8.0-arm64-v8a.le
 ## Roadmap
 
 1. Verify the native package loads in LeviLauncher.
-2. Identify a supported, version-verified way to capture loaded terrain.
-3. Feed captured heightfields into the RAM cache and LOD streamer.
-4. Verify 26.60 game-thread, block-update, and renderer hook points before attempting RenderSync.
-5. Investigate safe touch-state recovery and frame-pacing integration; do not bypass server-authoritative combat timing.
+2. Use the Zaphkiel-RE output to identify version-specific chunk and renderer methods.
+3. Feed verified captured heightfields into the RAM cache and LOD streamer.
+4. Add a build-gated SIG database and validate unique matches against Minecraft 26.60 before any adapter integration.
+5. Verify game-thread, block-update, and renderer interfaces before attempting RenderSync.
 6. Integrate mesh upload and rendering through a verified game-renderer interface.
 7. Test input, rendering, transitions, memory limits, and frame-time behavior on low-end Android devices.

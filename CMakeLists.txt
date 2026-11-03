@@ -14,6 +14,7 @@ add_library(ldh_core
   src/mesh_seams.cpp
   src/memory_chunk_cache.cpp
   src/input_diagnostics.cpp
+  src/signature_resolver.cpp
 )
 target_include_directories(ldh_core PUBLIC include)
 target_compile_features(ldh_core PUBLIC cxx_std_20)
@@ -55,6 +56,9 @@ if(LDH_BUILD_TESTS AND NOT ANDROID)
   add_executable(ldh_input_diagnostics_tests tests/input_diagnostics_tests.cpp)
   target_link_libraries(ldh_input_diagnostics_tests PRIVATE ldh_core)
   add_test(NAME ldh_input_diagnostics_tests COMMAND ldh_input_diagnostics_tests)
+  add_executable(ldh_signature_resolver_tests tests/signature_resolver_tests.cpp)
+  target_link_libraries(ldh_signature_resolver_tests PRIVATE ldh_core)
+  add_test(NAME ldh_signature_resolver_tests COMMAND ldh_signature_resolver_tests)
 endif()
 
 if(LDH_BUILD_LEVI_MOD)
